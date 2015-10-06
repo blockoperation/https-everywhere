@@ -6,6 +6,7 @@ var MATCH_START = 0;
 var MATCH_EXACT = 1;
 var MATCH_REGEX = 2;
 
+var httpRegex = /^http:/;
 var allMatchRegex = /^(\.[+*])?$/;
 
 function getUrlMatchType(pattern) {
@@ -23,11 +24,17 @@ function getUrlMatchType(pattern) {
  * @constructor
  */
 function Rule(from, to) {
-  //this.from = from;
   this.to = to;
-  this.from_type = getUrlMatchType(from);
-  this.from = (this.from_type === MATCH_REGEX) ? new RegExp(from)
-                                               : from.replace(/[\^\\$]/g, "");
+
+  if (from == "^http:") {
+    // This is by far the most common case, so use the same regex every time.
+    this.from_type = MATCH_REGEX;
+    this.from = httpRegex;
+  } else {
+    this.from_type = getUrlMatchType(from);
+    this.from = (this.from_type === MATCH_REGEX) ? new RegExp(from)
+                                                 : from.replace(/[\^\\$]/g, "");
+  }
 }
 
 /**
