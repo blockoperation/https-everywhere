@@ -331,7 +331,7 @@ RuleSets.prototype = {
         for (var j = 0; j < ruleset.cookierules.length; j++) {
           var cr = ruleset.cookierules[j];
           if ((!cr.host_c || cr.host_c.test(cookie.domain)) &&
-              (!cr.name_c || cr.name_c.test(cookie.name)) {
+              (!cr.name_c || cr.name_c.test(cookie.name))) {
             return ruleset;
           }
         }
