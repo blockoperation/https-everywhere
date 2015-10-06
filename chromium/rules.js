@@ -2,7 +2,19 @@
 var DBUG = 1;
 function log(){};
 
+var MATCH_START = 0;
+var MATCH_EXACT = 1;
+var MATCH_REGEX = 2;
+
 var allMatchRegex = /^(\.[+*])?$/;
+
+function getUrlMatchType(pattern) {
+  if (/^\^https?:(\/\/([0-9a-z\-]|\\\.)+\/([#&0-9a-zA-Z_\-]|\\\.|\/|\\\?)*\$?)?$/.test(pattern)) {
+    return /\$$/.test(pattern) ? MATCH_EXACT : MATCH_START;
+  }
+
+  return MATCH_REGEX;
+}
 
 /**
  * A single rule
@@ -13,7 +25,9 @@ var allMatchRegex = /^(\.[+*])?$/;
 function Rule(from, to) {
   //this.from = from;
   this.to = to;
-  this.from_c = new RegExp(from);
+  this.from_type = getUrlMatchType(from);
+  this.from = (this.from_type === MATCH_REGEX) ? new RegExp(from)
+                                               : from.replace(/[\^\\$]/g, "");
 }
 
 /**
@@ -22,8 +36,9 @@ function Rule(from, to) {
  * @constructor
  */
 function Exclusion(pattern) {
-  //this.pattern = pattern;
-  this.pattern_c = new RegExp(pattern);
+  this.pattern_type = getUrlMatchType(pattern);
+  this.pattern = (this.pattern_type === MATCH_REGEX) ? new RegExp(pattern)
+                                                     : pattern.replace(/[\^\\$]/g, "");
 }
 
 /**
@@ -71,7 +86,18 @@ RuleSet.prototype = {
     // If we're covered by an exclusion, go home
     if (this.exclusions) {
       for(var i = 0; i < this.exclusions.length; ++i) {
-        if (this.exclusions[i].pattern_c.test(urispec)) {
+        var exclusion = this.exclusions[i];
+        var exclude = false;
+
+        if (exclusion.pattern_type === MATCH_START) {
+          exclude = (urispec.indexOf(exclusion.pattern) == 0);
+        } else if (exclusion.pattern_type === MATCH_EXACT) {
+          exclude = (urispec == exclusion.pattern);
+        } else {
+          exclude = exclusion.pattern.test(urispec);
+        }
+
+        if (exclude) {
           log(DBUG,"excluded uri " + urispec);
           return null;
         }
@@ -85,8 +111,16 @@ RuleSet.prototype = {
 
     // Okay, now find the first rule that triggers
     for(var i = 0; i < this.rules.length; ++i) {
-      returl = urispec.replace(this.rules[i].from_c,
-                               this.rules[i].to);
+      var rule = this.rules[i];
+
+      if (rule.from_type === MATCH_START && urispec.indexOf(rule.from) == 0) {
+        returl = rule.to + urispec.substr(rule.from.length);
+      } else if (rule.from_type === MATCH_EXACT && urispec == rule.from) {
+        returl = rule.to;
+      } else {
+        returl = urispec.replace(rule.from, rule.to);
+      }
+
       if (returl != urispec) {
         return returl;
       }
