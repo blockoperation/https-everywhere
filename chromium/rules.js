@@ -2,6 +2,8 @@
 var DBUG = 1;
 function log(){};
 
+var allMatchRegex = /^(\.[+*])?$/;
+
 /**
  * A single rule
  * @param from
@@ -31,10 +33,8 @@ function Exclusion(pattern) {
  * @constructor
  */
 function CookieRule(host, cookiename) {
-  this.host = host;
-  this.host_c = new RegExp(host);
-  this.name = cookiename;
-  this.name_c = new RegExp(cookiename);
+  this.host_c = allMatchRegex.test(host) ? null : new RegExp(host);
+  this.name_c = allMatchRegex.test(cookiename) ? null : new RegExp(cookiename);
 }
 
 /**
@@ -330,7 +330,8 @@ RuleSets.prototype = {
       if (ruleset.active && ruleset.cookierules) {
         for (var j = 0; j < ruleset.cookierules.length; j++) {
           var cr = ruleset.cookierules[j];
-          if (cr.host_c.test(cookie.domain) && cr.name_c.test(cookie.name)) {
+          if ((!cr.host_c || cr.host_c.test(cookie.domain)) &&
+              (!cr.name_c || cr.name_c.test(cookie.name)) {
             return ruleset;
           }
         }
