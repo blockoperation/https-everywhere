@@ -52,9 +52,9 @@ function RuleSet(set_name, match_rule, default_state, note) {
   else
     this.ruleset_match_c = null;
   this.rules = [];
-  this.exclusions = [];
+  this.exclusions = null;
   this.targets = [];
-  this.cookierules = [];
+  this.cookierules = null;
   this.active = default_state;
   this.default_state = default_state;
   this.note = note;
@@ -69,10 +69,12 @@ RuleSet.prototype = {
   apply: function(urispec) {
     var returl = null;
     // If we're covered by an exclusion, go home
-    for(var i = 0; i < this.exclusions.length; ++i) {
-      if (this.exclusions[i].pattern_c.test(urispec)) {
-        log(DBUG,"excluded uri " + urispec);
-        return null;
+    if (this.exclusions) {
+      for(var i = 0; i < this.exclusions.length; ++i) {
+        if (this.exclusions[i].pattern_c.test(urispec)) {
+          log(DBUG,"excluded uri " + urispec);
+          return null;
+        }
       }
     }
     // If a ruleset has a match_rule and it fails, go no further
@@ -218,15 +220,21 @@ RuleSets.prototype = {
     }
 
     var exclusions = ruletag.getElementsByTagName("exclusion");
-    for(var j = 0; j < exclusions.length; j++) {
-      rule_set.exclusions.push(
-            new Exclusion(exclusions[j].getAttribute("pattern")));
+    if (exclusions.length > 0) {
+      rule_set.exclusions = [];
+      for(var j = 0; j < exclusions.length; j++) {
+        rule_set.exclusions.push(
+              new Exclusion(exclusions[j].getAttribute("pattern")));
+      }
     }
 
     var cookierules = ruletag.getElementsByTagName("securecookie");
-    for(var j = 0; j < cookierules.length; j++) {
-      rule_set.cookierules.push(new CookieRule(cookierules[j].getAttribute("host"),
-                                           cookierules[j].getAttribute("name")));
+    if (cookierules.length > 0) {
+      rule_set.cookierules = [];
+      for(var j = 0; j < cookierules.length; j++) {
+        rule_set.cookierules.push(new CookieRule(cookierules[j].getAttribute("host"),
+                                             cookierules[j].getAttribute("name")));
+      }
     }
 
     var targets = ruletag.getElementsByTagName("target");
@@ -319,7 +327,7 @@ RuleSets.prototype = {
     var rs = this.potentiallyApplicableRulesets(hostname);
     for (var i = 0; i < rs.length; ++i) {
       var ruleset = rs[i];
-      if (ruleset.active) {
+      if (ruleset.active && ruleset.cookierules) {
         for (var j = 0; j < ruleset.cookierules.length; j++) {
           var cr = ruleset.cookierules[j];
           if (cr.host_c.test(cookie.domain) && cr.name_c.test(cookie.name)) {
