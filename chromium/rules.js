@@ -408,7 +408,7 @@ RuleSets.prototype = {
       var ruleset = rs[i];
       if (ruleset.active && ruleset.cookierules) {
         for (var j = 0; j < ruleset.cookierules.length; j++) {
-          if (ruleset.cookierules[i].test(cookie)) {
+          if (ruleset.cookierules[j].test(cookie)) {
             return ruleset;
           }
         }
