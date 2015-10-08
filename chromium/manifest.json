@@ -36,6 +36,7 @@
         "tabs", 
         "cookies", 
         "storage", 
+        "unlimitedStorage", 
         "<all_urls>"
     ], 
     "update_url": "https://www.eff.org/files/https-everywhere-chrome-updates.xml", 

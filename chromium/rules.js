@@ -210,14 +210,9 @@ RuleSets.prototype = {
   /**
    * Iterate through data XML and load rulesets
    */
-  addFromXml: function(ruleXml) {
-    var sets = ruleXml.getElementsByTagName("ruleset");
+  addFromObjects: function(sets) {
     for (var i = 0; i < sets.length; ++i) {
-      try {
-        this.parseOneRuleset(sets[i]);
-      } catch (e) {
-        log(WARN, 'Error processing ruleset:' + e);
-      }
+      this.parseOneRuleset(sets[i]);
     }
   },
 
@@ -261,64 +256,53 @@ RuleSets.prototype = {
 
   /**
    * Does the loading of a ruleset.
-   * @param ruletag The whole <ruleset> tag to parse
+   * @param obj An object representing a <ruleset> tag
    */
-  parseOneRuleset: function(ruletag) {
+  parseOneRuleset: function(obj) {
     var default_state = true;
     var note = "";
-    var default_off = ruletag.getAttribute("default_off");
-    if (default_off) {
+    if (obj.default_off) {
       default_state = false;
-      note += default_off + "\n";
+      note += obj.default_off + "\n";
     }
 
     // If a ruleset declares a platform, and we don't match it, treat it as
     // off-by-default
-    var platform = ruletag.getAttribute("platform");
-    if (platform) {
-      if (platform.search(this.localPlatformRegexp) == -1) {
+    if (obj.platform) {
+      if (obj.platform.search(this.localPlatformRegexp) == -1) {
         default_state = false;
       }
-      note += "Platform(s): " + platform + "\n";
+      note += "Platform(s): " + obj.platform + "\n";
     }
 
-    var rule_set = new RuleSet(ruletag.getAttribute("name"),
-                               ruletag.getAttribute("match_rule"),
-                               default_state,
-                               note.trim());
+    var rule_set = new RuleSet(obj.name, obj.match_rule, default_state, note.trim());
 
     // Read user prefs
     if (rule_set.name in this.ruleActiveStates) {
       rule_set.active = (this.ruleActiveStates[rule_set.name] == "true");
     }
 
-    var rules = ruletag.getElementsByTagName("rule");
-    for(var j = 0; j < rules.length; j++) {
-      rule_set.rules.push(new Rule(rules[j].getAttribute("from"),
-                                    rules[j].getAttribute("to")));
+    for (var i = 0; i < obj.rules.length; ++i) {
+      rule_set.rules.push(new Rule(obj.rules[i].from, obj.rules[i].to));
     }
 
-    var exclusions = ruletag.getElementsByTagName("exclusion");
-    if (exclusions.length > 0) {
+    if (obj.exclusions) {
       rule_set.exclusions = [];
-      for(var j = 0; j < exclusions.length; j++) {
-        rule_set.exclusions.push(
-              new Exclusion(exclusions[j].getAttribute("pattern")));
+      for (var i = 0; i < obj.exclusions.length; ++i) {
+        rule_set.exclusions.push(new Exclusion(obj.exclusions[i]));
       }
     }
 
-    var cookierules = ruletag.getElementsByTagName("securecookie");
-    if (cookierules.length > 0) {
+    if (obj.cookierules) {
       rule_set.cookierules = [];
-      for(var j = 0; j < cookierules.length; j++) {
-        rule_set.cookierules.push(new CookieRule(cookierules[j].getAttribute("host"),
-                                             cookierules[j].getAttribute("name")));
+      for (var i = 0; i < obj.cookierules.length; ++i) {
+        rule_set.cookierules.push(new CookieRule(obj.cookierules[i].host,
+                                                 obj.cookierules[i].name));
       }
     }
 
-    var targets = ruletag.getElementsByTagName("target");
-    for(var j = 0; j < targets.length; j++) {
-       var host = targets[j].getAttribute("host");
+    for (var i = 0; i < obj.targets.length; ++i) {
+       var host = obj.targets[i];
        if (!(host in this.targets)) {
          this.targets[host] = [];
        }

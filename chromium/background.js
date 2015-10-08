@@ -20,12 +20,8 @@ function loadExtensionFile(url, returnType) {
   return xhr.responseText;
 }
 
-
-// Rules are loaded here
 var all_rules = new RuleSets(navigator.userAgent, LRUCache, localStorage);
 var rule_list = 'rules/default.rulesets';
-all_rules.addFromXml(loadExtensionFile(rule_list, 'xml'));
-
 
 var USER_RULE_KEY = 'userRules';
 // Records which tabId's are active in the HTTPS Switch Planner (see
@@ -40,20 +36,6 @@ var switchPlannerInfo = {};
 // Load prefs about whether http nowhere is on. Structure is:
 //  { httpNowhere: true/false }
 var httpNowhereOn = false;
-chrome.storage.sync.get({httpNowhere: false}, function(item) {
-  httpNowhereOn = item.httpNowhere;
-  setIconColor();
-});
-chrome.storage.onChanged.addListener(function(changes, areaName) {
-  if (areaName === 'sync') {
-    for (var key in changes) {
-      if (key === 'httpNowhere') {
-        httpNowhereOn = changes[key].newValue;
-        setIconColor();
-      }
-    }
-  }
-});
 
 /**
 * Load stored user rules
@@ -79,8 +61,6 @@ var loadStoredUserRules = function() {
   }
   log('INFO', 'loaded ' + i + ' stored user rules');
 };
-
-loadStoredUserRules();
 
 /**
  * Set the icon color correctly
@@ -507,23 +487,6 @@ function onBeforeRedirect(details) {
     }
 }
 
-// Registers the handler for requests
-// We listen to all HTTP hosts, because RequestFilter can't handle tons of url restrictions.
-wr.onBeforeRequest.addListener(onBeforeRequest, {urls: ["http://*/*"]}, ["blocking"]);
-
-// TODO: Listen only to the tiny subset of HTTPS hosts that we rewrite/downgrade.
-var httpsUrlsWeListenTo = ["https://*/*"];
-// See: https://developer.chrome.com/extensions/match_patterns
-wr.onBeforeRequest.addListener(onBeforeRequest, {urls: httpsUrlsWeListenTo}, ["blocking"]);
-
-
-// Try to catch redirect loops on URLs we've redirected to HTTPS.
-wr.onBeforeRedirect.addListener(onBeforeRedirect, {urls: ["https://*/*"]});
-
-
-// Listen for cookies set/updated and secure them if applicable. This function is async/nonblocking.
-chrome.cookies.onChanged.addListener(onCookieChanged);
-
 /**
  * disable switch Planner
  * @param tabId the Tab to disable for
@@ -542,25 +505,140 @@ function enableSwitchPlannerFor(tabId) {
   switchPlannerEnabledFor[tabId] = true;
 }
 
-// Listen for connection from the DevTools panel so we can set up communication.
-chrome.runtime.onConnect.addListener(function (port) {
-  if (port.name == "devtools-page") {
-    chrome.runtime.onMessage.addListener(function(message, sender, sendResponse){
-      var tabId = message.tabId;
-
-      var disableOnCloseCallback = function(port) {
-        log(DBUG, "Devtools window for tab " + tabId + " closed, clearing data.");
-        disableSwitchPlannerFor(tabId);
-      };
-
-      if (message.type === "enable") {
-        enableSwitchPlannerFor(tabId);
-        port.onDisconnect.addListener(disableOnCloseCallback);
-      } else if (message.type === "disable") {
-        disableSwitchPlannerFor(tabId);
-      } else if (message.type === "getSmallHtml") {
-        sendResponse({html: switchPlannerSmallHtml(tabId)});
+function start() {
+  chrome.storage.sync.get({httpNowhere: false}, function(item) {
+    httpNowhereOn = item.httpNowhere;
+    setIconColor();
+  });
+  chrome.storage.onChanged.addListener(function(changes, areaName) {
+    if (areaName === 'sync') {
+      for (var key in changes) {
+        if (key === 'httpNowhere') {
+          httpNowhereOn = changes[key].newValue;
+          setIconColor();
+        }
       }
+    }
+  });
+
+  loadStoredUserRules();
+
+  // Registers the handler for requests
+  // We listen to all HTTP hosts, because RequestFilter can't handle tons of url restrictions.
+  wr.onBeforeRequest.addListener(onBeforeRequest, {urls: ["http://*/*"]}, ["blocking"]);
+
+  // TODO: Listen only to the tiny subset of HTTPS hosts that we rewrite/downgrade.
+  var httpsUrlsWeListenTo = ["https://*/*"];
+  // See: https://developer.chrome.com/extensions/match_patterns
+  wr.onBeforeRequest.addListener(onBeforeRequest, {urls: httpsUrlsWeListenTo}, ["blocking"]);
+
+  // Try to catch redirect loops on URLs we've redirected to HTTPS.
+  wr.onBeforeRedirect.addListener(onBeforeRedirect, {urls: ["https://*/*"]});
+
+  // Listen for cookies set/updated and secure them if applicable. This function is async/nonblocking.
+  chrome.cookies.onChanged.addListener(onCookieChanged);
+
+  // Listen for connection from the DevTools panel so we can set up communication.
+  chrome.runtime.onConnect.addListener(function (port) {
+    if (port.name == "devtools-page") {
+      chrome.runtime.onMessage.addListener(function(message, sender, sendResponse){
+        var tabId = message.tabId;
+
+        var disableOnCloseCallback = function(port) {
+          log(DBUG, "Devtools window for tab " + tabId + " closed, clearing data.");
+          disableSwitchPlannerFor(tabId);
+        };
+
+        if (message.type === "enable") {
+          enableSwitchPlannerFor(tabId);
+          port.onDisconnect.addListener(disableOnCloseCallback);
+        } else if (message.type === "disable") {
+          disableSwitchPlannerFor(tabId);
+        } else if (message.type === "getSmallHtml") {
+          sendResponse({html: switchPlannerSmallHtml(tabId)});
+        }
+      });
+    }
+  });
+}
+
+function xmlRulesetToObject(ruleset) {
+  var result = {
+    name: ruleset.getAttribute("name"),
+    match_rule: ruleset.getAttribute("match_rule"),
+    default_off: ruleset.getAttribute("default_off"),
+    platform: ruleset.getAttribute("platform"),
+    rules: [],
+    exclusions: null,
+    cookierules: null,
+    targets: []
+  };
+
+  var rules = ruleset.getElementsByTagName("rule");
+  for (var i = 0; i < rules.length; ++i) {
+    result.rules.push({
+      from: rules[i].getAttribute("from"),
+      to: rules[i].getAttribute("to")
     });
   }
+
+  var exclusions = ruleset.getElementsByTagName("exclusion");
+  if (exclusions.length > 0) {
+    result.exclusions = [];
+    for (var i = 0; i < exclusions.length; ++i) {
+      result.exclusions.push(exclusions[i].getAttribute("pattern"));
+    }
+  }
+
+  var cookierules = ruleset.getElementsByTagName("securecookie");
+  if (cookierules.length > 0) {
+    result.cookierules = [];
+    for (var i = 0; i < cookierules.length; ++i) {
+      result.cookierules.push({
+        host: cookierules[i].getAttribute("host"),
+        name: cookierules[i].getAttribute("name")
+      });
+    }
+  }
+
+  var targets = ruleset.getElementsByTagName("target");
+  for (var i = 0; i < targets.length; ++i) {
+    result.targets.push(targets[i].getAttribute("host"));
+  }
+
+  return result;
+}
+
+/**
+ * Convert XML rulesets into objects
+ *
+ * @param rulesetsXml: an XML document containing rulesets
+ */
+function xmlRulesetsToObjects(rulesetsXml) {
+  var result = [];
+
+  var sets = rulesetsXml.getElementsByTagName("ruleset");
+  for (var i = 0; i < sets.length; ++i) {
+    try {
+      result.push(xmlRulesetToObject(sets[i]));
+    } catch (e) {
+      log(WARN, 'Error processing ruleset:' + e);
+    }
+  }
+
+  return result;
+}
+
+chrome.storage.local.get({rulesets: null, version: null}, function(items) {
+  var currentVersion = chrome.runtime.getManifest().version;
+  if (items.version === null || items.version != currentVersion || items.rulesets === null) {
+    var rulesets = xmlRulesetsToObjects(loadExtensionFile(rule_list, "xml"));
+    chrome.storage.local.set({rulesets: rulesets, version: currentVersion});
+    log(INFO, "Recached rulesets");
+    all_rules.addFromObjects(rulesets);
+  } else {
+    all_rules.addFromObjects(items.rulesets);
+  }
+
+  start();
 });
