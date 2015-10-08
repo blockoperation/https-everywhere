@@ -134,7 +134,6 @@ function RuleSet(set_name, match_rule, default_state, note) {
     this.ruleset_match_c = null;
   this.rules = [];
   this.exclusions = null;
-  this.targets = [];
   this.cookierules = null;
   this.active = default_state;
   this.default_state = default_state;
