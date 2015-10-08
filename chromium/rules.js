@@ -5,6 +5,7 @@ function log(){};
 var MATCH_START = 0;
 var MATCH_EXACT = 1;
 var MATCH_REGEX = 2;
+var MATCH_UNCOMP_REGEX = 3;
 
 var httpRegex = /^http:/;
 var allMatchRegex = /^(\.[+*])?$/;
@@ -32,8 +33,13 @@ function Rule(from, to) {
     this.from = httpRegex;
   } else {
     this.from_type = getUrlMatchType(from);
-    this.from = (this.from_type === MATCH_REGEX) ? new RegExp(from)
-                                                 : from.replace(/[\^\\$]/g, "");
+
+    if (this.from_type === MATCH_REGEX) {
+      this.from_type = MATCH_UNCOMP_REGEX;
+      this.from = from;
+    } else {
+      this.from = from.replace(/[\^\\$]/g, "");
+    }
   }
 }
 
@@ -44,6 +50,11 @@ Rule.prototype = {
    * @returns {string} The modified URL
    */
   apply: function(urispec) {
+    if (this.from_type === MATCH_UNCOMP_REGEX) {
+      this.from_type = MATCH_REGEX;
+      this.from = new RegExp(this.from);
+    }
+
     switch (this.from_type) {
       case MATCH_START:
         if (urispec.indexOf(this.from) == 0) {
@@ -71,8 +82,13 @@ Rule.prototype = {
  */
 function Exclusion(pattern) {
   this.pattern_type = getUrlMatchType(pattern);
-  this.pattern = (this.pattern_type === MATCH_REGEX) ? new RegExp(pattern)
-                                                     : pattern.replace(/[\^\\$]/g, "");
+
+  if (this.pattern_type === MATCH_REGEX) {
+    this.pattern_type = MATCH_UNCOMP_REGEX;
+    this.pattern = pattern;
+  } else {
+    this.pattern = pattern.replace(/[\^\\$]/g, "");
+  }
 }
 
 Exclusion.prototype = {
@@ -82,6 +98,11 @@ Exclusion.prototype = {
    * @returns {boolean}
    */
   test: function(urispec) {
+    if (this.pattern_type === MATCH_UNCOMP_REGEX) {
+      this.pattern_type = MATCH_REGEX;
+      this.pattern = new RegExp(this.pattern);
+    }
+
     switch (this.pattern_type) {
       case MATCH_START:
         return (urispec.indexOf(this.pattern) == 0);
@@ -102,8 +123,19 @@ Exclusion.prototype = {
  * @constructor
  */
 function CookieRule(host, cookiename) {
-  this.host_c = allMatchRegex.test(host) ? null : new RegExp(host);
-  this.name_c = allMatchRegex.test(cookiename) ? null : new RegExp(cookiename);
+  if (allMatchRegex.test(host)) {
+    this.host_c = null;
+  } else {
+    this.host_type = MATCH_UNCOMP_REGEX;
+    this.host_c = host;
+  }
+
+  if (allMatchRegex.test(cookiename)) {
+    this.name_c = null;
+  } else {
+    this.name_type = MATCH_UNCOMP_REGEX;
+    this.name_c = cookiename;
+  }
 }
 
 CookieRule.prototype = {
@@ -113,6 +145,16 @@ CookieRule.prototype = {
    * @returns {boolean}
    */
   test: function(cookie) {
+    if (this.host_type === MATCH_UNCOMP_REGEX) {
+      this.host_type = MATCH_REGEX;
+      this.host_c = new RegExp(this.host_c);
+    }
+
+    if (this.name_type === MATCH_UNCOMP_REGEX) {
+      this.name_type = MATCH_REGEX;
+      this.name_c = new RegExp(this.name_c);
+    }
+
     return ((!this.host_c || this.host_c.test(cookie.domain)) &&
             (!this.name_c || this.name_c.test(cookie.name)));
   }
