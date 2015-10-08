@@ -102,8 +102,25 @@ Exclusion.prototype = {
  * @constructor
  */
 function CookieRule(host, cookiename) {
-  this.host_c = allMatchRegex.test(host) ? null : new RegExp(host);
-  this.name_c = allMatchRegex.test(cookiename) ? null : new RegExp(cookiename);
+  if (!allMatchRegex.test(host)) {
+    if (/^\^([0-9a-z\-]|\\\.)*[0-9a-z]\$/.test(host)) {
+      this.host_type = MATCH_EXACT;
+      this.host = host.replace(/[\^\\$]/g, "");
+    } else {
+      this.host_type = MATCH_REGEX;
+      this.host = new RegExp(host);
+    }
+  }
+
+  if (!allMatchRegex.test(cookiename)) {
+    if (/^\^[0-9a-zA-Z_\-]+\$$/.test(cookiename)) {
+      this.name_type = MATCH_EXACT;
+      this.name = cookiename.replace(/[\^\\$]/g, "");
+    } else {
+      this.name_type = MATCH_REGEX;
+      this.name = new RegExp(cookiename);
+    }
+  }
 }
 
 CookieRule.prototype = {
@@ -113,8 +130,23 @@ CookieRule.prototype = {
    * @returns {boolean}
    */
   test: function(cookie) {
-    return ((!this.host_c || this.host_c.test(cookie.domain)) &&
-            (!this.name_c || this.name_c.test(cookie.name)));
+    if (this.host) {
+      if (this.host_type === MATCH_EXACT && cookie.domain != this.host) {
+        return false;
+      } else if (this.host_type === MATCH_REGEX && !this.host.test(cookie.domain)) {
+        return false;
+      }
+    }
+
+    if (this.name) {
+      if (this.name_type === MATCH_EXACT && cookie.name != this.name) {
+        return false;
+      } else if (this.name_type === MATCH_REGEX && !this.name.test(cookie.name)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 };
 
