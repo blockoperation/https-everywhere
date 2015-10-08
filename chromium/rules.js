@@ -10,7 +10,7 @@ var httpRegex = /^http:/;
 var allMatchRegex = /^(\.[+*])?$/;
 
 function getUrlMatchType(pattern) {
-  if (/^\^https?:(\/\/([0-9a-z\-]|\\\.)+\/([#&0-9a-zA-Z_\-]|\\\.|\/|\\\?)*\$?)?$/.test(pattern)) {
+  if (/^\^https?:(\/\/([0-9a-z\-]|\\\.)+\/([#&0-9a-zA-Z_\/\-]|\\\.|\\\?)*\$?)?$/.test(pattern)) {
     return /\$$/.test(pattern) ? MATCH_EXACT : MATCH_START;
   }
 
@@ -37,6 +37,33 @@ function Rule(from, to) {
   }
 }
 
+Rule.prototype = {
+  /**
+   * Apply this rule to a URL
+   * @param urispec The URL to modify
+   * @returns {string} The modified URL
+   */
+  apply: function(urispec) {
+    switch (this.from_type) {
+      case MATCH_START:
+        if (urispec.indexOf(this.from) == 0) {
+          return this.to + urispec.substr(this.from.length);
+        }
+        break;
+      case MATCH_EXACT:
+        if (urispec == this.from) {
+          return this.to;
+        }
+        break;
+      case MATCH_REGEX:
+        return urispec.replace(this.from, this.to);
+    }
+
+    return urispec;
+  }
+};
+
+
 /**
  * Regex-Compile a pattern
  * @param pattern The pattern to compile
@@ -48,6 +75,26 @@ function Exclusion(pattern) {
                                                      : pattern.replace(/[\^\\$]/g, "");
 }
 
+Exclusion.prototype = {
+  /**
+   * Test a URL against this exclusion
+   * @param urispec The URL to test
+   * @returns {boolean}
+   */
+  test: function(urispec) {
+    switch (this.pattern_type) {
+      case MATCH_START:
+        return (urispec.indexOf(this.pattern) == 0);
+      case MATCH_EXACT:
+        return (urispec == this.from);
+      case MATCH_REGEX:
+        return this.pattern.test(urispec);
+    }
+
+    return false;
+  }
+};
+
 /**
  * Generates a CookieRule
  * @param host The host regex to compile
@@ -58,6 +105,18 @@ function CookieRule(host, cookiename) {
   this.host_c = allMatchRegex.test(host) ? null : new RegExp(host);
   this.name_c = allMatchRegex.test(cookiename) ? null : new RegExp(cookiename);
 }
+
+CookieRule.prototype = {
+  /**
+   * Test a cookie against this cookie rule
+   * @param cookie The cookie to test
+   * @returns {boolean}
+   */
+  test: function(cookie) {
+    return ((!this.host_c || this.host_c.test(cookie.domain)) &&
+            (!this.name_c || this.name_c.test(cookie.name)));
+  }
+};
 
 /**
  *A collection of rules
@@ -89,22 +148,10 @@ RuleSet.prototype = {
    * @returns {*} null or the rewritten uri
    */
   apply: function(urispec) {
-    var returl = null;
     // If we're covered by an exclusion, go home
     if (this.exclusions) {
       for(var i = 0; i < this.exclusions.length; ++i) {
-        var exclusion = this.exclusions[i];
-        var exclude = false;
-
-        if (exclusion.pattern_type === MATCH_START) {
-          exclude = (urispec.indexOf(exclusion.pattern) == 0);
-        } else if (exclusion.pattern_type === MATCH_EXACT) {
-          exclude = (urispec == exclusion.pattern);
-        } else {
-          exclude = exclusion.pattern.test(urispec);
-        }
-
-        if (exclude) {
+        if (this.exclusions[i].test(urispec)) {
           log(DBUG,"excluded uri " + urispec);
           return null;
         }
@@ -118,20 +165,12 @@ RuleSet.prototype = {
 
     // Okay, now find the first rule that triggers
     for(var i = 0; i < this.rules.length; ++i) {
-      var rule = this.rules[i];
-
-      if (rule.from_type === MATCH_START && urispec.indexOf(rule.from) == 0) {
-        returl = rule.to + urispec.substr(rule.from.length);
-      } else if (rule.from_type === MATCH_EXACT && urispec == rule.from) {
-        returl = rule.to;
-      } else {
-        returl = urispec.replace(rule.from, rule.to);
-      }
-
+      var returl = this.rules[i].apply(urispec);
       if (returl != urispec) {
         return returl;
       }
     }
+
     if (this.ruleset_match_c) {
       // This is not an error, because we do not insist the matchrule
       // precisely describes to target space of URLs ot redirected
@@ -140,7 +179,6 @@ RuleSet.prototype = {
     }
     return null;
   }
-
 };
 
 /**
@@ -370,9 +408,7 @@ RuleSets.prototype = {
       var ruleset = rs[i];
       if (ruleset.active && ruleset.cookierules) {
         for (var j = 0; j < ruleset.cookierules.length; j++) {
-          var cr = ruleset.cookierules[j];
-          if ((!cr.host_c || cr.host_c.test(cookie.domain)) &&
-              (!cr.name_c || cr.name_c.test(cookie.name))) {
+          if (ruleset.cookierules[i].test(cookie)) {
             return ruleset;
           }
         }
