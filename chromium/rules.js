@@ -10,7 +10,7 @@ var httpRegex = /^http:/;
 var allMatchRegex = /^(\.[+*])?$/;
 
 function getUrlMatchType(pattern) {
-  if (/^\^https?:\/\/([0-9a-z\-]|\\\.)+\/([#&0-9a-zA-Z_\/\-]|\\\.|\\\?)*\$?$/.test(pattern)) {
+  if (/^\^https?:(\/\/([0-9a-z\-]|\\\.)+\/([#&0-9a-zA-Z_\/\-]|\\\.|\\\?)*\$?)?$/.test(pattern)) {
     return /\$$/.test(pattern) ? MATCH_EXACT : MATCH_START;
   }
 
