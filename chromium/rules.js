@@ -2,20 +2,65 @@
 var DBUG = 1;
 function log(){};
 
-var MATCH_START = 0;
-var MATCH_EXACT = 1;
-var MATCH_REGEX = 2;
+var stripTrivialRegex = /[\^\\$]/g; 
 
-var httpRegex = /^http:/;
-var allMatchRegex = /^(\.[+*])?$/;
-
-function getUrlMatchType(pattern) {
-  if (/^\^https?:(\/\/([0-9a-z\-]|\\\.)+\/([#&0-9a-zA-Z_\/\-]|\\\.|\\\?)*\$?)?$/.test(pattern)) {
-    return /\$$/.test(pattern) ? MATCH_EXACT : MATCH_START;
-  }
-
-  return MATCH_REGEX;
+function StartMatcher(pattern) {
+  this.pattern = pattern;
 }
+
+StartMatcher.prototype = {
+  test: function(s) {
+    return (s.indexOf(this.pattern) == 0);
+  },
+
+  apply: function(s, s2) {
+    return this.test(s) ? s2 + s.substr(this.pattern.length) : s;
+  }
+};
+
+function ExactMatcher(pattern) {
+  this.pattern = pattern;
+}
+
+ExactMatcher.prototype = {
+  test: function(s) {
+    return (s == this.pattern);
+  },
+
+  apply: function(s, s2) {
+    return this.test(s) ? s2 : s;
+  }
+};
+
+function RegexMatcher(pattern) {
+  this.pattern = new RegExp(pattern);
+}
+
+RegexMatcher.prototype = {
+  test: function(s) {
+    return this.pattern.test(s);
+  },
+
+  apply: function(s, s2) {
+    return s.replace(this.pattern, s2);
+  }
+};
+
+var createUrlMatcher = (function() {
+  var httpMatch = new RegexMatcher("http:");
+  var trivialUrlPatternRegex = /^\^https?:(\/\/([0-9a-z\-]|\\\.)+\/([#&0-9a-zA-Z_\/\-]|\\\.|\\\?)*\$?)?$/;
+
+  return function createUrlMatcher(s) {
+    if (s == "^http:") {
+      return httpMatch;
+    } else if (trivialUrlPatternRegex.test(s)) {
+      return /\$$/.test(s) ? new ExactMatcher(s.replace(stripTrivialRegex, ""))
+                           : new StartMatcher(s.replace(stripTrivialRegex, ""));
+    } else {
+      return new RegexMatcher(s);
+    }
+  };
+})();
 
 /**
  * A single rule
@@ -24,129 +69,87 @@ function getUrlMatchType(pattern) {
  * @constructor
  */
 function Rule(from, to) {
+  this.from = createUrlMatcher(from);
   this.to = to;
-
-  if (from == "^http:") {
-    // This is by far the most common case, so use the same regex every time.
-    this.from_type = MATCH_REGEX;
-    this.from = httpRegex;
-  } else {
-    this.from_type = getUrlMatchType(from);
-    this.from = (this.from_type === MATCH_REGEX) ? new RegExp(from)
-                                                 : from.replace(/[\^\\$]/g, "");
-  }
 }
 
 Rule.prototype = {
   /**
    * Apply this rule to a URL
    * @param urispec The URL to modify
-   * @returns {string} The modified URL
    */
   apply: function(urispec) {
-    switch (this.from_type) {
-      case MATCH_START:
-        if (urispec.indexOf(this.from) == 0) {
-          return this.to + urispec.substr(this.from.length);
-        }
-        break;
-      case MATCH_EXACT:
-        if (urispec == this.from) {
-          return this.to;
-        }
-        break;
-      case MATCH_REGEX:
-        return urispec.replace(this.from, this.to);
-    }
-
-    return urispec;
+    return this.from.apply(urispec, this.to);
   }
 };
 
+var createRule = (function() {
+  var httpToHttpsRule = new Rule("^http:", "https:");
+
+  return function createRule(from, to) {
+    if (from == "^http:" && to == "https:") {
+      return httpToHttpsRule;
+    } else {
+      return new Rule(from, to);
+    }
+  };
+})();
 
 /**
- * Regex-Compile a pattern
- * @param pattern The pattern to compile
+ * An exclusion rule
+ * @param pattern The pattern to exclude
  * @constructor
  */
 function Exclusion(pattern) {
-  this.pattern_type = getUrlMatchType(pattern);
-  this.pattern = (this.pattern_type === MATCH_REGEX) ? new RegExp(pattern)
-                                                     : pattern.replace(/[\^\\$]/g, "");
+  this.pattern = createUrlMatcher(pattern);
 }
 
 Exclusion.prototype = {
   /**
    * Test a URL against this exclusion
    * @param urispec The URL to test
-   * @returns {boolean}
    */
   test: function(urispec) {
-    switch (this.pattern_type) {
-      case MATCH_START:
-        return (urispec.indexOf(this.pattern) == 0);
-      case MATCH_EXACT:
-        return (urispec == this.pattern);
-      case MATCH_REGEX:
-        return this.pattern.test(urispec);
-    }
-
-    return false;
+    return this.pattern.test(urispec);
   }
 };
 
 /**
  * Generates a CookieRule
- * @param host The host regex to compile
- * @param cookiename The cookie name Regex to compile
+ * @param host The host to match
+ * @param name The name to match
  * @constructor
  */
-function CookieRule(host, cookiename) {
-  if (!allMatchRegex.test(host)) {
-    if (/^\^([0-9a-z\-]|\\\.)*[0-9a-z]\$/.test(host)) {
-      this.host_type = MATCH_EXACT;
-      this.host = host.replace(/[\^\\$]/g, "");
+function CookieRule(host, name) {
+  if (!this.allMatchRegex.test(host)) {
+    if (this.trivialHostPatternRegex.test(host)) {
+      this.host = new ExactMatcher(host.replace(stripTrivialRegex, ""));
     } else {
-      this.host_type = MATCH_REGEX;
       this.host = new RegExp(host);
     }
   }
 
-  if (!allMatchRegex.test(cookiename)) {
-    if (/^\^[0-9a-zA-Z_\-]+\$$/.test(cookiename)) {
-      this.name_type = MATCH_EXACT;
-      this.name = cookiename.replace(/[\^\\$]/g, "");
+  if (!this.allMatchRegex.test(name)) {
+    if (this.trivialNamePatternRegex.test(name)) {
+      this.name = new ExactMatcher(name.replace(stripTrivialRegex, ""));
     } else {
-      this.name_type = MATCH_REGEX;
-      this.name = new RegExp(cookiename);
+      this.name = new RegExp(name);
     }
   }
 }
 
 CookieRule.prototype = {
+  allMatchRegex: /^(\.[+*])?$/,
+  trivialHostPatternRegex: /^\^([0-9a-z\-]|\\\.)*[0-9a-z]\$/,
+  trivialNamePatternRegex: /^\^[0-9a-zA-Z_\-]+\$$/,
+
   /**
-   * Test a cookie against this cookie rule
+   * Test a cookie against this rule
    * @param cookie The cookie to test
-   * @returns {boolean}
    */
   test: function(cookie) {
-    if (this.host) {
-      if (this.host_type === MATCH_EXACT && cookie.domain != this.host) {
-        return false;
-      } else if (this.host_type === MATCH_REGEX && !this.host.test(cookie.domain)) {
-        return false;
-      }
-    }
-
-    if (this.name) {
-      if (this.name_type === MATCH_EXACT && cookie.name != this.name) {
-        return false;
-      } else if (this.name_type === MATCH_REGEX && !this.name.test(cookie.name)) {
-        return false;
-      }
-    }
-
-    return true;
+    return ((!this.host || this.host.test(cookie.domain)) &&
+            (!this.name || this.name.test(cookie.name)));
   }
 };
 
@@ -270,7 +273,7 @@ RuleSets.prototype = {
   addUserRule : function(params) {
     log(INFO, 'adding new user rule for ' + JSON.stringify(params));
     var new_rule_set = new RuleSet(params.host, null, true, "user rule");
-    var new_rule = new Rule(params.urlMatcher, params.redirectTo);
+    var new_rule = createRule(params.urlMatcher, params.redirectTo);
     new_rule_set.rules.push(new_rule);
     if (!(params.host in this.targets)) {
       this.targets[params.host] = [];
@@ -314,7 +317,7 @@ RuleSets.prototype = {
     }
 
     for (var i = 0; i < obj.rules.length; ++i) {
-      rule_set.rules.push(new Rule(obj.rules[i].from, obj.rules[i].to));
+      rule_set.rules.push(createRule(obj.rules[i].from, obj.rules[i].to));
     }
 
     if (obj.exclusions) {
