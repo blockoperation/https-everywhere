@@ -86,7 +86,7 @@ Exclusion.prototype = {
       case MATCH_START:
         return (urispec.indexOf(this.pattern) == 0);
       case MATCH_EXACT:
-        return (urispec == this.from);
+        return (urispec == this.pattern);
       case MATCH_REGEX:
         return this.pattern.test(urispec);
     }
