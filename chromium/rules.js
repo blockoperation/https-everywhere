@@ -47,7 +47,7 @@ RegexMatcher.prototype = {
 };
 
 var createUrlMatcher = (function() {
-  var httpMatch = new RegexMatcher("http:");
+  var httpMatch = new RegexMatcher("^http:");
   var trivialUrlPatternRegex = /^\^https?:(\/\/([0-9a-z\-]|\\\.)+\/([#&0-9a-zA-Z_\/\-]|\\\.|\\\?)*\$?)?$/;
 
   return function createUrlMatcher(s) {
