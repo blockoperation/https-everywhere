@@ -4,10 +4,14 @@
     }, 
     "background": {
         "scripts": [
-            "lru.js", 
-            "rules.js", 
-            "util.js", 
-            "background.js"
+            "js/utils.js", 
+            "js/background.js", 
+            "js/parser.js", 
+            "js/tabs.js", 
+            "js/rulesets.js", 
+            "js/storage.js", 
+            "js/requests.js", 
+            "js/init.js"
         ]
     }, 
     "browser_action": {
@@ -28,7 +32,7 @@
     }, 
     "incognito": "split", 
     "manifest_version": 2, 
-    "minimum_chrome_version": "18", 
+    "minimum_chrome_version": "45", 
     "name": "__MSG_about_ext_name__", 
     "permissions": [
         "webRequest", 
