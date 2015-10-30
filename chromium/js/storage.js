@@ -23,7 +23,7 @@ function loadRulesets(file, callback) {
         return;
       }
 
-      rs = HTTPSe.parser.parseXmlRulesets(loadXmlFile(file));
+      rs = HTTPSe.parser.parseXmlRulesets(xml);
       chrome.storage.local.set({rulesets: rs, version: HTTPSe.version});
     }
 
