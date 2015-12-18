@@ -4,10 +4,10 @@
     }, 
     "background": {
         "scripts": [
-            "lru.js", 
-            "rules.js", 
-            "util.js", 
-            "background.js"
+            "js/lru.js", 
+            "js/util.js", 
+            "js/rules.js", 
+            "js/background.js"
         ]
     }, 
     "browser_action": {
