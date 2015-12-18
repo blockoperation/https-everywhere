@@ -40,17 +40,12 @@ function CookieRule(host, cookiename) {
 /**
  *A collection of rules
  * @param set_name The name of this set
- * @param match_rule Quick test match rule
  * @param default_state activity state
  * @param note Note will be displayed in popup
  * @constructor
  */
-function RuleSet(set_name, match_rule, default_state, note) {
+function RuleSet(set_name, default_state, note) {
   this.name = set_name;
-  if (match_rule)
-    this.ruleset_match_c = new RegExp(match_rule);
-  else
-    this.ruleset_match_c = null;
   this.rules = null;
   this.exclusions = null;
   this.cookierules = null;
@@ -78,12 +73,6 @@ RuleSet.prototype = {
       }
     }
 
-    // If a ruleset has a match_rule and it fails, go no further
-    if (this.ruleset_match_c && !this.ruleset_match_c.test(urispec)) {
-      log(VERB, "ruleset_match_c excluded " + urispec);
-      return null;
-    }
-
     // Okay, now find the first rule that triggers
     if (this.rules !== null) {
       for (var i = 0; i < this.rules.length; ++i) {
@@ -92,13 +81,6 @@ RuleSet.prototype = {
           return returl;
         }
       }
-    }
-
-    if (this.ruleset_match_c) {
-      // This is not an error, because we do not insist the matchrule
-      // precisely describes to target space of URLs ot redirected
-      log(DBUG,"Ruleset "+this.name
-              +" had an applicable match-rule but no matching rules");
     }
 
     return null;
@@ -207,7 +189,6 @@ RuleSets.prototype = {
     }
 
     var rule_set = new RuleSet(ruletag.getAttribute("name"),
-                               ruletag.getAttribute("match_rule"),
                                default_state,
                                note.trim());
 
