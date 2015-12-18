@@ -88,7 +88,7 @@ function gotTab(tab) {
   if (tabObj !== undefined) {
     for (var r of tabObj.rulesets) {
       var listDiv = r.default_state ? stableRules : unstableRules;
-      listDiv.appendChild(createRuleLine(rulesets[r]));
+      listDiv.appendChild(createRuleLine(r));
       listDiv.style.position = "static";
       listDiv.style.visibility = "visible";
     }
