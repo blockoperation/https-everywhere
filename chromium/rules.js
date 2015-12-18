@@ -51,10 +51,9 @@ function RuleSet(set_name, match_rule, default_state, note) {
     this.ruleset_match_c = new RegExp(match_rule);
   else
     this.ruleset_match_c = null;
-  this.rules = [];
-  this.exclusions = [];
-  this.targets = [];
-  this.cookierules = [];
+  this.rules = null;
+  this.exclusions = null;
+  this.cookierules = null;
   this.active = default_state;
   this.default_state = default_state;
   this.note = note;
@@ -68,13 +67,17 @@ RuleSet.prototype = {
    */
   apply: function(urispec) {
     var returl = null;
+
     // If we're covered by an exclusion, go home
-    for(var i = 0; i < this.exclusions.length; ++i) {
-      if (this.exclusions[i].pattern_c.test(urispec)) {
-        log(DBUG,"excluded uri " + urispec);
-        return null;
+    if (this.exclusions !== null) {
+      for (var i = 0; i < this.exclusions.length; ++i) {
+        if (this.exclusions[i].pattern_c.test(urispec)) {
+          log(DBUG, "excluded uri " + urispec);
+          return null;
+        }
       }
     }
+
     // If a ruleset has a match_rule and it fails, go no further
     if (this.ruleset_match_c && !this.ruleset_match_c.test(urispec)) {
       log(VERB, "ruleset_match_c excluded " + urispec);
@@ -82,22 +85,24 @@ RuleSet.prototype = {
     }
 
     // Okay, now find the first rule that triggers
-    for(var i = 0; i < this.rules.length; ++i) {
-      returl = urispec.replace(this.rules[i].from_c,
-                               this.rules[i].to);
-      if (returl != urispec) {
-        return returl;
+    if (this.rules !== null) {
+      for (var i = 0; i < this.rules.length; ++i) {
+        returl = urispec.replace(this.rules[i].from_c, this.rules[i].to);
+        if (returl != urispec) {
+          return returl;
+        }
       }
     }
+
     if (this.ruleset_match_c) {
       // This is not an error, because we do not insist the matchrule
       // precisely describes to target space of URLs ot redirected
       log(DBUG,"Ruleset "+this.name
               +" had an applicable match-rule but no matching rules");
     }
+
     return null;
   }
-
 };
 
 /**
@@ -164,7 +169,7 @@ RuleSets.prototype = {
     log(INFO, 'adding new user rule for ' + JSON.stringify(params));
     var new_rule_set = new RuleSet(params.host, null, true, "user rule");
     var new_rule = new Rule(params.urlMatcher, params.redirectTo);
-    new_rule_set.rules.push(new_rule);
+    new_rule_set.rules = [new_rule];
     if (!(params.host in this.targets)) {
       this.targets[params.host] = [];
     }
@@ -212,21 +217,30 @@ RuleSets.prototype = {
     }
 
     var rules = ruletag.getElementsByTagName("rule");
-    for(var j = 0; j < rules.length; j++) {
-      rule_set.rules.push(new Rule(rules[j].getAttribute("from"),
-                                    rules[j].getAttribute("to")));
+    if (rules.length > 0) {
+      rule_set.rules = [];
+      for(var j = 0; j < rules.length; j++) {
+        rule_set.rules.push(new Rule(rules[j].getAttribute("from"),
+                                      rules[j].getAttribute("to")));
+      }
     }
 
     var exclusions = ruletag.getElementsByTagName("exclusion");
-    for(var j = 0; j < exclusions.length; j++) {
-      rule_set.exclusions.push(
-            new Exclusion(exclusions[j].getAttribute("pattern")));
+    if (exclusions.length > 0) {
+      rule_set.exclusions = [];
+      for(var j = 0; j < exclusions.length; j++) {
+        rule_set.exclusions.push(
+              new Exclusion(exclusions[j].getAttribute("pattern")));
+      }
     }
 
     var cookierules = ruletag.getElementsByTagName("securecookie");
-    for(var j = 0; j < cookierules.length; j++) {
-      rule_set.cookierules.push(new CookieRule(cookierules[j].getAttribute("host"),
-                                           cookierules[j].getAttribute("name")));
+    if (cookierules.length > 0) {
+      rule_set.cookierules = [];
+      for(var j = 0; j < cookierules.length; j++) {
+        rule_set.cookierules.push(new CookieRule(cookierules[j].getAttribute("host"),
+                                             cookierules[j].getAttribute("name")));
+      }
     }
 
     var targets = ruletag.getElementsByTagName("target");
@@ -319,7 +333,7 @@ RuleSets.prototype = {
     var rs = this.potentiallyApplicableRulesets(hostname);
     for (var i = 0; i < rs.length; ++i) {
       var ruleset = rs[i];
-      if (ruleset.active) {
+      if (ruleset.active && ruleset.cookierules !== null) {
         for (var j = 0; j < ruleset.cookierules.length; j++) {
           var cr = ruleset.cookierules[j];
           if (cr.host_c.test(cookie.domain) && cr.name_c.test(cookie.name)) {

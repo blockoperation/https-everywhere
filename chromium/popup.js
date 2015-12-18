@@ -55,11 +55,13 @@ function createRuleLine(ruleset) {
   // favicon (from chrome's cache)
   var favicon = document.createElement("img");
   favicon.src = "chrome://favicon/";
-  for (var i=0; i < ruleset.rules.length; i++) {
-    var host = hostReg.exec(ruleset.rules[i].to);
-    if (host) {
-      favicon.src += host[0];
-      break;
+  if (ruleset.rules !== null) {
+    for (var i=0; i < ruleset.rules.length; i++) {
+      var host = hostReg.exec(ruleset.rules[i].to);
+      if (host) {
+        favicon.src += host[0];
+        break;
+      }
     }
   }
   label.appendChild(favicon);
