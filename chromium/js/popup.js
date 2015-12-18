@@ -83,17 +83,17 @@ function createRuleLine(ruleset) {
  * @param tab
  */
 function gotTab(tab) {
-  var rulesets = HTTPSe.tabs.getRulesets(tab.id);
+  var tabObj = HTTPSe.tabs.get(tab.id);
 
-  for (var r in rulesets) {
-    var listDiv = stableRules;
-    if (!rulesets[r].default_state) {
-      listDiv = unstableRules;
+  if (tabObj !== undefined) {
+    for (var r of tabObj.rulesets) {
+      var listDiv = r.default_state ? stableRules : unstableRules;
+      listDiv.appendChild(createRuleLine(rulesets[r]));
+      listDiv.style.position = "static";
+      listDiv.style.visibility = "visible";
     }
-    listDiv.appendChild(createRuleLine(rulesets[r]));
-    listDiv.style.position = "static";
-    listDiv.style.visibility = "visible";
   }
+
   // Only show the "Add a rule" link if we're on an HTTPS page
   if (/^https:/.test(tab.url)) {
     show(e("add-rule-link"));

@@ -125,42 +125,7 @@ var addNewRule = function(params, cb) {
   }
 };
 
-/**
- * Adds a listener for removed tabs
- * */
-function AppliedRulesets() {
-  this.active_tab_rules = {};
-
-  var that = this;
-  chrome.tabs.onRemoved.addListener(function(tabId, info) {
-    that.removeTab(tabId);
-  });
-}
-
-AppliedRulesets.prototype = {
-  addRulesetToTab: function(tabId, ruleset) {
-    if (tabId in this.active_tab_rules) {
-      this.active_tab_rules[tabId][ruleset.name] = ruleset;
-    } else {
-      this.active_tab_rules[tabId] = {};
-      this.active_tab_rules[tabId][ruleset.name] = ruleset;
-    }
-  },
-
-  getRulesets: function(tabId) {
-    if (tabId in this.active_tab_rules) {
-      return this.active_tab_rules[tabId];
-    }
-    return null;
-  },
-
-  removeTab: function(tabId) {
-    delete this.active_tab_rules[tabId];
-  }
-};
-
-// FIXME: change this name
-HTTPSe.tabs = new AppliedRulesets();
+HTTPSe.tabs = new TabMap();
 
 // redirect counter workaround
 // TODO: Remove this code if they ever give us a real counter
@@ -172,6 +137,10 @@ var redirectCounter = {};
  * @param details of the handler, see Chrome doc
  * */
 function onBeforeRequest(details) {
+  var tab = HTTPSe.tabs.get(details.tabId);
+  if (tab !== undefined && details.type === "main_frame")
+    tab.reset();
+
   var uri = document.createElement('a');
   uri.href = details.url;
 
@@ -202,17 +171,17 @@ function onBeforeRequest(details) {
     log(INFO, "Original url " + details.url + 
         " changed before processing to " + canonical_url);
   }
-  if (canonical_url in urlBlacklist) {
-    return {cancel: shouldCancel};
-  }
-
-  if (details.type == "main_frame") {
-    HTTPSe.tabs.removeTab(details.tabId);
-  }
 
   var rs = HTTPSe.rulesets.potentiallyApplicableRulesets(uri.hostname);
   // If no rulesets could apply, let's get out of here!
   if (rs.length === 0) { return {cancel: shouldCancel}; }
+
+  if (tab === undefined)
+    tab = HTTPSe.tabs.register(details.tabId);
+
+  if (canonical_url in urlBlacklist) {
+    return {cancel: shouldCancel};
+  }
 
   if (redirectCounter[details.requestId] >= 8) {
     log(NOTE, "Redirect counter hit for " + canonical_url);
@@ -226,7 +195,7 @@ function onBeforeRequest(details) {
   var newuristr = null;
 
   for(var i = 0; i < rs.length; ++i) {
-    HTTPSe.tabs.addRulesetToTab(details.tabId, rs[i]);
+    tab.addRuleset(rs[i]);
     if (rs[i].active && !newuristr) {
       newuristr = rs[i].apply(canonical_url);
     }
