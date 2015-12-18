@@ -16,8 +16,8 @@ function StartMatcher(pattern) {
 }
 
 StartMatcher.prototype = {
-  apply: (s, s2) => this.test(s) ? s2 + s.substr(this.pattern.length) : s,
-  test: (s) => s.startsWith(this.pattern)
+  apply(s, s2) { return this.test(s) ? s2 + s.substr(this.pattern.length) : s; },
+  test(s) { return s.startsWith(this.pattern); }
 };
 
 function ExactMatcher(pattern) {
@@ -25,8 +25,8 @@ function ExactMatcher(pattern) {
 }
 
 ExactMatcher.prototype = {
-  apply: (s, s2) => this.test(s) ? s2 : s,
-  test: (s) => (s === this.pattern)
+  apply(s, s2) { return this.test(s) ? s2 : s; },
+  test(s) { return (s === this.pattern); }
 };
 
 function RegexMatcher(pattern) {
@@ -34,8 +34,8 @@ function RegexMatcher(pattern) {
 }
 
 RegexMatcher.prototype = {
-  apply: (s, s2) => s.replace(this.pattern, s2),
-  test: (s) => this.pattern.test(s)
+  apply(s, s2) { return s.replace(this.pattern, s2); },
+  test(s) { return this.pattern.test(s); }
 };
 
 function createUrlMatcher(pattern) {
@@ -67,8 +67,8 @@ function Rule(from, to) {
 }
 
 Rule.prototype = {
-  apply: (url) => this.from.apply(url, this.to),
-  test: (url) => this.from.test(url)
+  apply(url) { return this.from.apply(url, this.to); },
+  test(url) { return this.from.test(url); }
 };
 
 function createRule(from, to) {
@@ -88,7 +88,7 @@ function Exclusion(pattern) {
 }
 
 Exclusion.prototype = {
-  test: (url) => this.pattern.test(url)
+  test(url) { return this.pattern.test(url) }
 };
 
 var allMatchCookieRule = {
@@ -114,7 +114,7 @@ function CookieRule(host, name) {
 }
 
 CookieRule.prototype = {
-  test: (cookie) => (this.host.test(cookie.domain) && this.name.test(cookie.name))
+  test(cookie) { return (this.host.test(cookie.domain) && this.name.test(cookie.name)); }
 };
 
 /**
@@ -130,7 +130,7 @@ function HostnameCookieRule(host) {
 }
 
 HostnameCookieRule.prototype = {
-  test: (cookie) => this.host.test(cookie.domain)
+  test(cookie) { return this.host.test(cookie.domain); }
 };
 
 function createCookieRule(host, name) {
