@@ -227,7 +227,7 @@ RuleSet.prototype = {
 function RuleSets(userAgent, cache, ruleActiveStates) {
   // Load rules into structure
   var t1 = new Date().getTime();
-  this.targets = {};
+  this.targets = new Map();
   this.userAgent = userAgent;
 
   // A cache for potentiallyApplicableRulesets
@@ -273,6 +273,20 @@ RuleSets.prototype = {
   })(),
 
   /**
+   * Add ruleset to targets
+   * @param host
+   * @param rs
+   */
+  addTarget: function(host, rs) {
+    var old = this.targets.get(host);
+
+    if (old === undefined)
+      this.targets.set(host, [rs]);
+    else
+      old.push(rs);
+  },
+
+  /**
    * Load a user rule
    * @param params
    * @returns {boolean}
@@ -282,12 +296,8 @@ RuleSets.prototype = {
     var new_rule_set = new RuleSet(params.host, null, true, "user rule");
     var new_rule = createRule(params.urlMatcher, params.redirectTo);
     new_rule_set.rules = [new_rule];
-    if (!(params.host in this.targets)) {
-      this.targets[params.host] = [];
-    }
+    this.addTarget(params.host, new_rule_set);
     this.ruleCache.remove(params.host);
-    // TODO: maybe promote this rule?
-    this.targets[params.host].push(new_rule_set);
     if (new_rule_set.name in this.ruleActiveStates) {
       new_rule_set.active = (this.ruleActiveStates[new_rule_set.name] == "true");
     }
@@ -355,13 +365,8 @@ RuleSets.prototype = {
     }
 
     var targets = ruletag.getElementsByTagName("target");
-    for(var j = 0; j < targets.length; j++) {
-       var host = targets[j].getAttribute("host");
-       if (!(host in this.targets)) {
-         this.targets[host] = [];
-       }
-       this.targets[host].push(rule_set);
-    }
+    for(var j = 0; j < targets.length; j++)
+      this.addTarget(targets[j].getAttribute("host"), rule_set);
   },
 
   /**
@@ -393,24 +398,25 @@ RuleSets.prototype = {
 
     var tmp;
     var results = [];
-    if (this.targets[host]) {
+
+    var targets = this.targets.get(host);
+    if (targets !== undefined)
       // Copy the host targets so we don't modify them.
-      results = this.targets[host].slice();
-    }
+      results = targets.slice();
 
     // Replace each portion of the domain with a * in turn
     var segmented = host.split(".");
     for (var i = 0; i < segmented.length; ++i) {
       tmp = segmented[i];
       segmented[i] = "*";
-      this.setInsert(results, this.targets[segmented.join(".")]);
+      this.setInsert(results, this.targets.get(segmented.join(".")));
       segmented[i] = tmp;
     }
     // now eat away from the left, with *, so that for x.y.z.google.com we
     // check *.z.google.com and *.google.com (we did *.y.z.google.com above)
     for (var i = 2; i <= segmented.length - 2; ++i) {
       t = "*." + segmented.slice(i,segmented.length).join(".");
-      this.setInsert(results, this.targets[t]);
+      this.setInsert(results, this.targets.get(t));
     }
     log(DBUG,"Applicable rules for " + host + ":");
     if (results.length == 0)
