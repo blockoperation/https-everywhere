@@ -6,6 +6,7 @@
         "scripts": [
             "js/lru.js", 
             "js/util.js", 
+            "js/httpse.js", 
             "js/rules.js", 
             "js/background.js"
         ]

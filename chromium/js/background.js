@@ -22,9 +22,8 @@ function loadExtensionFile(url, returnType) {
 
 
 // Rules are loaded here
-var all_rules = new RuleSets(navigator.userAgent, LRUCache, localStorage);
-var rule_list = 'rules/default.rulesets';
-all_rules.addFromXml(loadExtensionFile(rule_list, 'xml'));
+HTTPSe.rulesets = new RuleSets(navigator.userAgent, LRUCache, HTTPSe.ruleStates);
+HTTPSe.rulesets.addFromXml(loadExtensionFile(HTTPSe.rulesetFile, 'xml'));
 
 
 var USER_RULE_KEY = 'userRules';
@@ -39,16 +38,15 @@ var switchPlannerInfo = {};
 
 // Load prefs about whether http nowhere is on. Structure is:
 //  { httpNowhere: true/false }
-var httpNowhereOn = false;
 chrome.storage.sync.get({httpNowhere: false}, function(item) {
-  httpNowhereOn = item.httpNowhere;
+  HTTPSe.httpNowhere = item.httpNowhere;
   setIconColor();
 });
 chrome.storage.onChanged.addListener(function(changes, areaName) {
   if (areaName === 'sync') {
     for (var key in changes) {
       if (key === 'httpNowhere') {
-        httpNowhereOn = changes[key].newValue;
+        HTTPSe.httpNowhere = changes[key].newValue;
         setIconColor();
       }
     }
@@ -75,7 +73,7 @@ var loadStoredUserRules = function() {
   var rules = getStoredUserRules();
   var i;
   for (i = 0; i < rules.length; ++i) {
-    all_rules.addUserRule(rules[i]);
+    HTTPSe.rulesets.addUserRule(rules[i]);
   }
   log('INFO', 'loaded ' + i + ' stored user rules');
 };
@@ -87,7 +85,7 @@ loadStoredUserRules();
  * Depending on http-nowhere it should be red/default
  */
 var setIconColor = function() {
-  var newIconPath = httpNowhereOn ? './icon38-red.png' : './icon38.png';
+  var newIconPath = HTTPSe.httpNowhere ? './icon38-red.png' : './icon38.png';
   chrome.browserAction.setIcon({
     path: newIconPath
   });
@@ -98,7 +96,7 @@ for (var v in localStorage) {
   log(DBUG, "localStorage["+v+"]: "+localStorage[v]);
 }
 
-var rs = all_rules.potentiallyApplicableRulesets("www.google.com");
+var rs = HTTPSe.rulesets.potentiallyApplicableRulesets("www.google.com");
 for (r in rs) {
   log(DBUG, rs[r].name +": "+ rs[r].active);
   log(DBUG, rs[r].name +": "+ rs[r].default_state);
@@ -111,7 +109,7 @@ for (r in rs) {
  * @param cb: Callback to call after success/fail
  * */
 var addNewRule = function(params, cb) {
-  if (all_rules.addUserRule(params)) {
+  if (HTTPSe.rulesets.addUserRule(params)) {
     // If we successfully added the user rule, save it in local 
     // storage so it's automatically applied when the extension is 
     // reloaded.
@@ -162,10 +160,7 @@ AppliedRulesets.prototype = {
 };
 
 // FIXME: change this name
-var activeRulesets = new AppliedRulesets();
-
-var urlBlacklist = {};
-var domainBlacklist = {};
+HTTPSe.tabs = new AppliedRulesets();
 
 // redirect counter workaround
 // TODO: Remove this code if they ever give us a real counter
@@ -181,7 +176,7 @@ function onBeforeRequest(details) {
   uri.href = details.url;
 
   // Should the request be canceled?
-  var shouldCancel = (httpNowhereOn && uri.protocol === 'http:');
+  var shouldCancel = (HTTPSe.httpNowhere && uri.protocol === 'http:');
 
   // Normalise hosts such as "www.example.com."
   var canonical_host = uri.hostname;
@@ -212,18 +207,18 @@ function onBeforeRequest(details) {
   }
 
   if (details.type == "main_frame") {
-    activeRulesets.removeTab(details.tabId);
+    HTTPSe.tabs.removeTab(details.tabId);
   }
 
-  var rs = all_rules.potentiallyApplicableRulesets(uri.hostname);
+  var rs = HTTPSe.rulesets.potentiallyApplicableRulesets(uri.hostname);
   // If no rulesets could apply, let's get out of here!
   if (rs.length === 0) { return {cancel: shouldCancel}; }
 
   if (redirectCounter[details.requestId] >= 8) {
     log(NOTE, "Redirect counter hit for " + canonical_url);
-    urlBlacklist[canonical_url] = true;
+    HTTPSe.urlBlacklist[canonical_url] = true;
     var hostname = uri.hostname;
-    domainBlacklist[hostname] = true;
+    HTTPSe.domainBlacklist[hostname] = true;
     log(WARN, "Domain blacklisted " + hostname);
     return {cancel: shouldCancel};
   }
@@ -231,7 +226,7 @@ function onBeforeRequest(details) {
   var newuristr = null;
 
   for(var i = 0; i < rs.length; ++i) {
-    activeRulesets.addRulesetToTab(details.tabId, rs[i]);
+    HTTPSe.tabs.addRulesetToTab(details.tabId, rs[i]);
     if (rs[i].active && !newuristr) {
       newuristr = rs[i].apply(canonical_url);
     }
@@ -256,7 +251,7 @@ function onBeforeRequest(details) {
                          newuristr);
   }
 
-  if (httpNowhereOn) {
+  if (HTTPSe.httpNowhere) {
     if (newuristr && newuristr.substring(0, 5) === "http:") {
       // Abort early if we're about to redirect to HTTP in HTTP Nowhere mode
       return {cancel: true};
@@ -460,7 +455,7 @@ function switchPlannerDetailsHtmlSection(tab_id, rewritten) {
  * */
 function onCookieChanged(changeInfo) {
   if (!changeInfo.removed && !changeInfo.cookie.secure) {
-    if (all_rules.shouldSecureCookie(changeInfo.cookie, false)) {
+    if (HTTPSe.rulesets.shouldSecureCookie(changeInfo.cookie, false)) {
       var cookie = {name:changeInfo.cookie.name,
                     value:changeInfo.cookie.value,
                     path:changeInfo.cookie.path,

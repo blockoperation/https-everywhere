@@ -1,5 +1,6 @@
 "use strict";
 var backgroundPage = chrome.extension.getBackgroundPage();
+var HTTPSe = backgroundPage.HTTPSe;
 var stableRules = null;
 var unstableRules = null;
 var hostReg = /.*\/\/[^$/]*\//;
@@ -17,11 +18,11 @@ function toggleRuleLine(checkbox, ruleset) {
   ruleset.active = checkbox.checked;
 
   if (ruleset.active != ruleset.default_state) {
-    localStorage[ruleset.name] = ruleset.active;
+    HTTPSe.ruleStates[ruleset.name] = ruleset.active;
   } else {
-    delete localStorage[ruleset.name];
+    delete HTTPSe.ruleStates[ruleset.name];
     // purge the name from the cache so that this unchecking is persistent.
-    backgroundPage.all_rules.ruleCache.remove(ruleset.name);
+    HTTPse.rulesets.ruleCache.remove(ruleset.name);
   }
   // Now reload the selected tab of the current window.
   chrome.tabs.reload();
@@ -82,7 +83,7 @@ function createRuleLine(ruleset) {
  * @param tab
  */
 function gotTab(tab) {
-  var rulesets = backgroundPage.activeRulesets.getRulesets(tab.id);
+  var rulesets = HTTPSe.tabs.getRulesets(tab.id);
 
   for (var r in rulesets) {
     var listDiv = stableRules;
@@ -108,9 +109,8 @@ document.addEventListener("DOMContentLoaded", function () {
   chrome.tabs.getSelected(null, gotTab);
 
   // Print the extension's current version.
-  var the_manifest = chrome.runtime.getManifest();
   var version_info = document.getElementById('current-version');
-  version_info.innerText = the_manifest.version;
+  version_info.innerText = HTTPSe.version;
 
   // Set up toggle checkbox for HTTP nowhere mode
   getOption_('httpNowhere', false, function(item) {
