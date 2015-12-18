@@ -14,15 +14,23 @@ function Rule(from, to) {
   this.from_c = new RegExp(from);
 }
 
+Rule.prototype = {
+  apply: (url) => url.replace(this.from_c, this.to),
+  test: (url) => this.from_c.test(url)
+};
+
 /**
  * Regex-Compile a pattern
  * @param pattern The pattern to compile
  * @constructor
  */
 function Exclusion(pattern) {
-  //this.pattern = pattern;
   this.pattern_c = new RegExp(pattern);
 }
+
+Exclusion.prototype = {
+  test: (url) => this.pattern_c.test(url)
+};
 
 /**
  * Generates a CookieRule
@@ -31,11 +39,13 @@ function Exclusion(pattern) {
  * @constructor
  */
 function CookieRule(host, cookiename) {
-  this.host = host;
   this.host_c = new RegExp(host);
-  this.name = cookiename;
   this.name_c = new RegExp(cookiename);
 }
+
+CookieRule.prototype = {
+  test: (cookie) => (this.host_c.test(cookie.domain) && this.name_c.test(cookie.name))
+};
 
 /**
  *A collection of rules
@@ -64,26 +74,51 @@ RuleSet.prototype = {
     var returl = null;
 
     // If we're covered by an exclusion, go home
-    if (this.exclusions !== null) {
-      for (var i = 0; i < this.exclusions.length; ++i) {
-        if (this.exclusions[i].pattern_c.test(urispec)) {
-          log(DBUG, "excluded uri " + urispec);
-          return null;
-        }
-      }
+    if (this.testExclusion(urispec)) {
+      log(DBUG, "excluded uri " + urispec);
+      return null;
     }
 
     // Okay, now find the first rule that triggers
     if (this.rules !== null) {
       for (var i = 0; i < this.rules.length; ++i) {
-        returl = urispec.replace(this.rules[i].from_c, this.rules[i].to);
-        if (returl != urispec) {
+        returl = this.rules[i].apply(urispec);
+        if (returl !== urispec)
           return returl;
-        }
       }
     }
 
     return null;
+  },
+  test: function(urispec) {
+    if (this.testExclusion(urispec))
+      return false;
+
+    if (this.rules !== null) {
+      for (var i = 0; i < this.rules.length; ++i)
+        if (this.rules[i].test(urispec))
+          return true;
+    }
+
+    return false;
+  },
+  testExclusion: function(urispec) {
+    if (this.exclusions !== null) {
+      for (var i = 0; i < this.exclusions.length; ++i)
+        if (this.exclusions[i].test(urispec))
+          return true;
+    }
+
+    return false;
+  },
+  testCookie: function(cookie) {
+    if (this.cookierules !== null) {
+      for (var i = 0; i < this.cookierules.length; ++i)
+        if (this.cookierules[i].test(cookie))
+          return true;
+    }
+
+    return false;
   }
 };
 
@@ -312,17 +347,10 @@ RuleSets.prototype = {
     }
 
     var rs = this.potentiallyApplicableRulesets(hostname);
-    for (var i = 0; i < rs.length; ++i) {
-      var ruleset = rs[i];
-      if (ruleset.active && ruleset.cookierules !== null) {
-        for (var j = 0; j < ruleset.cookierules.length; j++) {
-          var cr = ruleset.cookierules[j];
-          if (cr.host_c.test(cookie.domain) && cr.name_c.test(cookie.name)) {
-            return ruleset;
-          }
-        }
-      }
-    }
+    for (var i = 0; i < rs.length; ++i)
+      if (rs[i].active && rs[i].testCookie(cookie))
+        return ruleset;
+
     return null;
   },
 
@@ -364,8 +392,7 @@ RuleSets.prototype = {
     log(INFO, "Testing securecookie applicability with " + test_uri);
     var rs = this.potentiallyApplicableRulesets(domain);
     for (var i = 0; i < rs.length; ++i) {
-      if (!rs[i].active) continue;
-      if (rs[i].apply(test_uri)) {
+      if (rs[i].active && rs[i].apply(test_uri)) {
         log(INFO, "Cookie domain could be secured.");
         this.cookieHostCache.set(domain, true);
         return true;
