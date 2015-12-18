@@ -48,6 +48,12 @@ function createUrlMatcher(pattern) {
   }
 }
 
+var trivialRule = {
+  _matcher: new StartMatcher("http:"),
+  apply: (url) => trivialRule._matcher.apply(url, "https:"),
+  test: (url) => trivialRule._matcher.test(url)
+};
+
 /**
  * A single rule
  * @param from
@@ -63,6 +69,13 @@ Rule.prototype = {
   apply: (url) => this.from.apply(url, this.to),
   test: (url) => this.from.test(url)
 };
+
+function createRule(from, to) {
+  if (from === "^http:" && to === "https:")
+    return trivialRule;
+  else
+    return new Rule(from, to);
+}
 
 /**
  * Regex-Compile a pattern
@@ -237,7 +250,7 @@ RuleSets.prototype = {
   addUserRule : function(params) {
     log(INFO, 'adding new user rule for ' + JSON.stringify(params));
     var new_rule_set = new RuleSet(params.host, null, true, "user rule");
-    var new_rule = new Rule(params.urlMatcher, params.redirectTo);
+    var new_rule = createRule(params.urlMatcher, params.redirectTo);
     new_rule_set.rules = [new_rule];
     if (!(params.host in this.targets)) {
       this.targets[params.host] = [];
@@ -288,8 +301,8 @@ RuleSets.prototype = {
     if (rules.length > 0) {
       rule_set.rules = [];
       for(var j = 0; j < rules.length; j++) {
-        rule_set.rules.push(new Rule(rules[j].getAttribute("from"),
-                                      rules[j].getAttribute("to")));
+        rule_set.rules.push(createRule(rules[j].getAttribute("from"),
+                                       rules[j].getAttribute("to")));
       }
     }
 
