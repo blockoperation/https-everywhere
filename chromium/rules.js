@@ -5,6 +5,7 @@ function log(){};
 var reTrivialUrl = /^\^https?:\/\/(?:[0-9a-z-]|\\\.)+\/(?:[#&0-9a-zA-Z_\/-]|\\\.|\\\?)*\$?$/;
 var reTrivialCookieHost = /^\^(?:[0-9a-z-]|\\\.)*[0-9a-z]\$/;
 var reTrivialCookieName = /^\^[0-9a-zA-Z_-]+\$$/;
+var reAllMatch = /^(\.[+*])?$/;
 
 function stripTrivialPattern(s) {
   return s.replace(/[\^\\$]/g, "");
@@ -90,6 +91,10 @@ Exclusion.prototype = {
   test: (url) => this.pattern.test(url)
 };
 
+var allMatchCookieRule = {
+  test: (cookie) => true
+};
+
 /**
  * Generates a CookieRule
  * @param host The host regex to compile
@@ -111,6 +116,31 @@ function CookieRule(host, name) {
 CookieRule.prototype = {
   test: (cookie) => (this.host.test(cookie.domain) && this.name.test(cookie.name))
 };
+
+/**
+ * Generates a HostnameCookieRule
+ * @param host The host regex to compile
+ * @constructor
+ */
+function HostnameCookieRule(host) {
+  if (reTrivialCookieHost.test(host))
+    this.host = new ExactMatcher(stripTrivialPattern(host));
+  else
+    this.host = new RegexMatcher(host);
+}
+
+HostnameCookieRule.prototype = {
+  test: (cookie) => this.host.test(cookie.domain)
+};
+
+function createCookieRule(host, name) {
+  if (reAllMatch.test(host) && reAllMatch.test(name))
+    return allMatchCookieRule;
+  else if (reAllMatch.test(name))
+    return new HostnameCookieRule(host);
+  else
+    return new CookieRule(host, name);
+}
 
 /**
  *A collection of rules
@@ -319,8 +349,8 @@ RuleSets.prototype = {
     if (cookierules.length > 0) {
       rule_set.cookierules = [];
       for(var j = 0; j < cookierules.length; j++) {
-        rule_set.cookierules.push(new CookieRule(cookierules[j].getAttribute("host"),
-                                             cookierules[j].getAttribute("name")));
+        rule_set.cookierules.push(createCookieRule(cookierules[j].getAttribute("host"),
+                                                   cookierules[j].getAttribute("name")));
       }
     }
 
