@@ -2,6 +2,52 @@
 var DBUG = 1;
 function log(){};
 
+var reTrivialUrl = /^\^https?:\/\/(?:[0-9a-z-]|\\\.)+\/(?:[#&0-9a-zA-Z_\/-]|\\\.|\\\?)*\$?$/;
+var reTrivialCookieHost = /^\^(?:[0-9a-z-]|\\\.)*[0-9a-z]\$/;
+var reTrivialCookieName = /^\^[0-9a-zA-Z_-]+\$$/;
+
+function stripTrivialPattern(s) {
+  return s.replace(/[\^\\$]/g, "");
+}
+
+function StartMatcher(pattern) {
+  this.pattern = pattern;
+}
+
+StartMatcher.prototype = {
+  apply: (s, s2) => this.test(s) ? s2 + s.substr(this.pattern.length) : s,
+  test: (s) => s.startsWith(this.pattern)
+};
+
+function ExactMatcher(pattern) {
+  this.pattern = pattern;
+}
+
+ExactMatcher.prototype = {
+  apply: (s, s2) => this.test(s) ? s2 : s,
+  test: (s) => (s === this.pattern)
+};
+
+function RegexMatcher(pattern) {
+  this.pattern = new RegExp(pattern);
+}
+
+RegexMatcher.prototype = {
+  apply: (s, s2) => s.replace(this.pattern, s2),
+  test: (s) => this.pattern.test(s)
+};
+
+function createUrlMatcher(pattern) {
+  if (reTrivialUrl.test(pattern)) {
+    if (/\$$/.test(pattern))
+      return new ExactMatcher(stripTrivialPattern(pattern));
+    else
+      return new StartMatcher(stripTrivialPattern(pattern));
+  } else {
+    return new RegexMatcher(pattern);
+  }
+}
+
 /**
  * A single rule
  * @param from
@@ -9,14 +55,13 @@ function log(){};
  * @constructor
  */
 function Rule(from, to) {
-  //this.from = from;
+  this.from = createUrlMatcher(from);
   this.to = to;
-  this.from_c = new RegExp(from);
 }
 
 Rule.prototype = {
-  apply: (url) => url.replace(this.from_c, this.to),
-  test: (url) => this.from_c.test(url)
+  apply: (url) => this.from.apply(url, this.to),
+  test: (url) => this.from.test(url)
 };
 
 /**
@@ -25,26 +70,33 @@ Rule.prototype = {
  * @constructor
  */
 function Exclusion(pattern) {
-  this.pattern_c = new RegExp(pattern);
+  this.pattern = createUrlMatcher(pattern);
 }
 
 Exclusion.prototype = {
-  test: (url) => this.pattern_c.test(url)
+  test: (url) => this.pattern.test(url)
 };
 
 /**
  * Generates a CookieRule
  * @param host The host regex to compile
- * @param cookiename The cookie name Regex to compile
+ * @param name The cookie name Regex to compile
  * @constructor
  */
-function CookieRule(host, cookiename) {
-  this.host_c = new RegExp(host);
-  this.name_c = new RegExp(cookiename);
+function CookieRule(host, name) {
+  if (reTrivialCookieHost.test(host))
+    this.host = new ExactMatcher(stripTrivialPattern(host));
+  else
+    this.host = new RegexMatcher(host);
+
+  if (reTrivialCookieName.test(name))
+    this.name = new ExactMatcher(stripTrivialPattern(name));
+  else
+    this.name = new RegexMatcher(name);
 }
 
 CookieRule.prototype = {
-  test: (cookie) => (this.host_c.test(cookie.domain) && this.name_c.test(cookie.name))
+  test: (cookie) => (this.host.test(cookie.domain) && this.name.test(cookie.name))
 };
 
 /**
